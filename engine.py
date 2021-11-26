@@ -1,14 +1,18 @@
 from __future__ import unicode_literals
 from hazm import Normalizer, word_tokenize, stopwords_list
 import string
+from hazm.utils import words_list
 import openpyxl
 from parsivar import FindStems
 import re
 from collections import OrderedDict
 import json
 import os
+import matplotlib.pyplot as plt
+import math
 
 stop_words = stopwords_list()
+stop_words.extend(['،','؛','»','«'])
 normalizer = Normalizer()
 stemmer = FindStems()
 index = dict() #token -> [freq, {doc_id1: [freq, pos1, pos2, ...], doc_id2: [freq, pos1, pos2, ...], ...}]
@@ -26,8 +30,11 @@ def perform_linguistic_preprocessing(text, delete_stop_words=True):
         for i,token in enumerate(token_list):
             if token not in stop_words:
                 token_positions.append([token, i+1])
-    token_list = list(map(lambda token: (stemmer.convert_to_stem(token[0]), token[1]), token_positions))
-    return token_list
+    else:
+        for i,token in enumerate(token_list):
+                token_positions.append([token, i+1])
+
+    return list(map(lambda token: (stemmer.convert_to_stem(token[0]), token[1]), token_positions))
 
 wb = openpyxl.load_workbook(EXCEL_FILE_NAME)
 sheet = wb.active
@@ -153,12 +160,31 @@ def multiple_word_query(query):
 
         return news
 
-if os.path.exists('index.json'):
-    index = read_index()
-else:
-    create_index(index)
+def plot_zipf_law(index):
+    index = OrderedDict(sorted(index.items(), key=lambda x: x[1][0], reverse=True))
+    word_list = list(index.keys())
+    count_multiply_rank = []
+    count = []
+    for i in range(len(word_list)):
+        count_multiply_rank.append(math.log10(index[word_list[i]][0]))
+        count.append(index[word_list[i]][0])
+    ranks = list(map(lambda x: math.log10(x), range(1, len(word_list)+1)))
+    plt.plot(ranks, count_multiply_rank)
+    # plt.plot(list(range(1, len(word_list)+1)), count)
+    plt.show()
 
-print(stemmer.convert_to_stem('پرندگان'))
+if not os.path.exists('index.json'):
+    create_index(index, delete_stop_words=False)
+
+index = read_index()
+print(list(index.items())[0])
+index = OrderedDict(sorted(index.items(), key=lambda x: x[1][0], reverse=True))
+print(list(index.items())[0][1][0], list(index.items())[0][0])
+print(list(index.items())[1][1][0])
+print(list(index.items())[2][1][0])
+print(list(index.items())[-1][1][0], list(index.items())[-1][0])
+print(index[list(index.keys())[0]][0])
+plot_zipf_law(index)
 while True:
     query = input('Enter your query: ')
     query = list(map(lambda token: token[0], perform_linguistic_preprocessing(query)))
