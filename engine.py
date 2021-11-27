@@ -1,7 +1,6 @@
 from __future__ import unicode_literals
-from hazm import Normalizer, word_tokenize, stopwords_list
+from hazm import Normalizer, word_tokenize, stopwords_list, Stemmer
 import string
-from hazm.utils import words_list
 import openpyxl
 from parsivar import FindStems
 import re
@@ -12,17 +11,17 @@ import matplotlib.pyplot as plt
 import math
 
 stop_words = stopwords_list()
-stop_words.extend(['،','؛','»','«'])
 normalizer = Normalizer()
 stemmer = FindStems()
 index = dict() #token -> [freq, {doc_id1: [freq, pos1, pos2, ...], doc_id2: [freq, pos1, pos2, ...], ...}]
 EXCEL_FILE_NAME = 'data.xlsx'
 LINK_REGEX = r"((http|https)\:\/\/)?[a-zA-Z0-9\.\/\?\:@\-_=#]+\.([a-zA-Z]){2,6}([ا-یa-zA-Z0-9\.\&\/\?\:@\-_=# ])*"
+punctuations = string.punctuation
+punctuations += ''.join(['،','؛','»','«'])
 
-
-def perform_linguistic_preprocessing(text, delete_stop_words=True):
+def perform_linguistic_preprocessing(text, delete_stop_words=True, stemming=True):
     text = re.sub(LINK_REGEX, '', text)
-    text = text.translate(str.maketrans('', '', string.punctuation))
+    text = text.translate(str.maketrans('', '', punctuations))
     text = normalizer.normalize(text)
     token_list = word_tokenize(text)
     token_positions = []
@@ -33,14 +32,16 @@ def perform_linguistic_preprocessing(text, delete_stop_words=True):
     else:
         for i,token in enumerate(token_list):
                 token_positions.append([token, i+1])
+    if stemming:
+        return list(map(lambda token: (stemmer.convert_to_stem(token[0]), token[1]), token_positions))
 
-    return list(map(lambda token: (stemmer.convert_to_stem(token[0]), token[1]), token_positions))
+    return token_positions
 
 wb = openpyxl.load_workbook(EXCEL_FILE_NAME)
 sheet = wb.active
 
 def create_index(index, delete_stop_words=True):
-    for i in range(2, sheet.max_row):
+    for i in range(2, sheet.max_row + 1):
         content = sheet.cell(row=i, column=1).value
         token_list = perform_linguistic_preprocessing(content, delete_stop_words=delete_stop_words)
         for token in token_list:
@@ -138,8 +139,6 @@ def double_word_query(word1, word2):
 def multiple_word_query(query):
     if len(query) == 1:
         return single_word_query(query[0])
-    elif len(query) == 2:
-        return double_word_query(query[0], query[1])
     else:
         news = []
         for i in range(len(query), 1, -1): # Making different lengths
@@ -170,21 +169,23 @@ def plot_zipf_law(index):
         count.append(index[word_list[i]][0])
     ranks = list(map(lambda x: math.log10(x), range(1, len(word_list)+1)))
     plt.plot(ranks, count_multiply_rank)
-    # plt.plot(list(range(1, len(word_list)+1)), count)
     plt.show()
 
+def count_tokens_and_text_length(n,stemming=True):
+    tokens = dict()
+    length = 0
+    for i in range(2, 2 + n):
+        content = sheet.cell(row=i, column=1).value
+        length += len(word_tokenize(content))
+        token_list = perform_linguistic_preprocessing(content, stemming=stemming)
+        for token in token_list:
+            tokens[token[0]] = True
+    return len(tokens), length
+
 if not os.path.exists('index.json'):
-    create_index(index, delete_stop_words=False)
+    create_index(index, delete_stop_words=True)
 
 index = read_index()
-print(list(index.items())[0])
-index = OrderedDict(sorted(index.items(), key=lambda x: x[1][0], reverse=True))
-print(list(index.items())[0][1][0], list(index.items())[0][0])
-print(list(index.items())[1][1][0])
-print(list(index.items())[2][1][0])
-print(list(index.items())[-1][1][0], list(index.items())[-1][0])
-print(index[list(index.keys())[0]][0])
-plot_zipf_law(index)
 while True:
     query = input('Enter your query: ')
     query = list(map(lambda token: token[0], perform_linguistic_preprocessing(query)))
@@ -199,4 +200,5 @@ while True:
                 print(new[1] + ': ' + new[0])
     else:
         print('No news found')
+
         
