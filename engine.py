@@ -19,6 +19,8 @@ EXCEL_FILE_NAME = 'data.xlsx'
 LINK_REGEX = r"((http|https)\:\/\/)?[a-zA-Z0-9\.\/\?\:@\-_=#]+\.([a-zA-Z]){2,6}([ا-یa-zA-Z0-9\.\&\/\?\:@\-_=# ])*"
 punctuations = string.punctuation
 punctuations += ''.join(['،','؛','»','«'])
+CHAMPIONS_LIST_SIZE=  20
+champions_list = dict()
 
 def perform_linguistic_preprocessing(text, delete_stop_words=True, stemming=True):
     '''
@@ -106,10 +108,19 @@ def create_length_arr(index):
     for i in range(len(arr)):
         arr[i] = math.sqrt(arr[i])
     return arr
+
+def create_champions_list(index):
+    champions_list = dict()
+    for term, postings in index.items():
+        tops = sorted(postings[1].items(), key=lambda x: x[1][0], reverse=True)
+        top_k = tops[:min(CHAMPIONS_LIST_SIZE,len(tops))]
+        champions_list[term] = [item[0] for item in top_k]
+    json.dump(champions_list, open(f'champions{CHAMPIONS_LIST_SIZE}.json', 'w'))
+    return champions_list
     
-def read_index():
-    '''A function to read the index from the json file.'''
-    value = json.loads(open('index.json', 'r').read())
+def read_dic_from_file(file_name):
+    '''A function to read dictionary from a json file.'''
+    value = json.loads(open(file_name, 'r').read())
     return OrderedDict(value.items())
 
 def single_word_query(word):
@@ -234,30 +245,38 @@ def doc_has_coverage(doc_id, query_terms, coverage_threshold=0.6):
         return True
     return False
     
-def ranked_retreival_search(query, index_elimination_threshold=0.0, doc_coverage_threshold=0.6):
+def ranked_retreival_search(query, index_elimination_threshold=0.0, doc_coverage_threshold=0.6, use_champions_list=False):
     '''A function to perform a ranked retrieval search.'''
     doc_number = sheet.max_row - 1
-    scores = [0 for i in range(doc_number)]
     query_items = set([(term,query.count(term)) for term in query])
-    all_docs_containing_terms = []
-    # Adding all documents containing at least one of the query terms
-    for item in query_items:
-        if item[0] in index:
-            postings = index[item[0]][1]
-            for doc_id in postings:
-                all_docs_containing_terms.append(doc_id)
+    all_docs_containing_terms = set()
+    if not use_champions_list:
+        # Adding all documents containing at least one of the query terms (index elimination)
+        for item in query_items:
+            if item[0] in index and math.log10(doc_number / index[item[0]][2]) >= index_elimination_threshold:
+                postings = index[item[0]][1]
+                for doc_id in postings:
+                    all_docs_containing_terms.add(doc_id)
+    else:
+        # Adding champions list docs
+        for item in query_items:
+           if item[0] in index and math.log10(doc_number / index[item[0]][2]) >= index_elimination_threshold:
+               all_docs_containing_terms.update(champions_list[item[0]]) 
+
     # Filtering the documents that do not have the coverage threshold
     all_docs_containing_terms = list(filter(lambda x: doc_has_coverage(x, [item[0] for item in query_items], doc_coverage_threshold), all_docs_containing_terms))
+
+    scores = [0 for i in range(doc_number)]
     # Loop over the query items
-    for term in query_items:
+    for item in query_items:
         # Check if the term is in the index
-        if term[0] in index and math.log10(doc_number / index[term[0]][2]) >= index_elimination_threshold:
+        if item[0] in index:
             # Calculate tf.idf for each query item in query
-            w_tq = (1 + math.log10(term[1])) * math.log10(doc_number / index[term[0]][2])
+            w_tq = (1 + math.log10(item[1])) * math.log10(doc_number / index[item[0]][2])
             # Add tf.id for each query item and its documents
             for doc_id in all_docs_containing_terms:
-                if doc_id in index[term[0]][1]:
-                    w_dt = (1 + math.log10(index[term[0]][1][doc_id][0])) * math.log10(doc_number / index[term[0]][2])
+                if doc_id in index[item[0]][1]:
+                    w_dt = (1 + math.log10(index[item[0]][1][doc_id][0])) * math.log10(doc_number / index[item[0]][2])
                     tf_idf = w_tq * w_dt
                     scores[int(doc_id) - 1] += tf_idf
     # devide each score by document length
@@ -269,9 +288,9 @@ def ranked_retreival_search(query, index_elimination_threshold=0.0, doc_coverage
     # return the top 10 results
     return [str(x[0] + 1) for x in scores_sorted[:10]]
 
-def search(query, ranked=True, index_eliminiation_threshold=0.0, doc_coverage_threshold=0.6):
+def search(query, ranked=True, index_eliminiation_threshold=0.0, doc_coverage_threshold=0.6, use_champions_list=False):
     if ranked:
-        return ranked_retreival_search(query, index_elimination_threshold=index_eliminiation_threshold, doc_coverage_threshold=doc_coverage_threshold)
+        return ranked_retreival_search(query, index_elimination_threshold=index_eliminiation_threshold, doc_coverage_threshold=doc_coverage_threshold, use_champions_list=use_champions_list)
     return multiple_word_query(query)
 
 def plot_zipf_law(index):
@@ -300,10 +319,19 @@ def count_tokens_and_text_length(n, stemming=True):
     return len(tokens), length
 
 if not os.path.exists('index.json'):
+    print('Creating index...')
     create_index(index, delete_stop_words=True)
+else:
+    print('Reading index...')
+    index = read_dic_from_file('index.json')
 
-print('Reading index...')
-index = read_index()
+if not os.path.exists(f'champions{CHAMPIONS_LIST_SIZE}.json'):
+    print('Creating champions list...')
+    champions_list = create_champions_list(index)
+else:
+    print('Reading champions list...')
+    champions_list = read_dic_from_file(f'champions{CHAMPIONS_LIST_SIZE}.json')
+
 print('Creating length array...')
 length_arr = create_length_arr(index)
 
@@ -311,7 +339,7 @@ while True:
     query = input('Enter your query: ')
     query = list(map(lambda token: token[0], perform_linguistic_preprocessing(query)))
     if len(query) != 0:
-        news = search(query, ranked=True, index_eliminiation_threshold=0.0, doc_coverage_threshold=0.5)
+        news = search(query, ranked=True, index_eliminiation_threshold=0.0, doc_coverage_threshold=0.5, use_champions_list=True)
         if news is None:
             print('No news found')
         else:
