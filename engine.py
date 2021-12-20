@@ -223,11 +223,31 @@ def multiple_word_query(query):
 
         return news
 
-def ranked_retreival_search(query, index_elimination_threshold=0.0):
+def doc_has_coverage(doc_id, query_terms, coverage_threshold=0.6):
+    total_terms = len(query_terms)
+    n = 0
+    for term in query_terms:
+        if term in index:
+            if doc_id in index[term][1]:
+                n += 1
+    if n / total_terms >= coverage_threshold:
+        return True
+    return False
+    
+def ranked_retreival_search(query, index_elimination_threshold=0.0, doc_coverage_threshold=0.6):
     '''A function to perform a ranked retrieval search.'''
-    query_items = set([(term,query.count(term)) for term in query])
     doc_number = sheet.max_row - 1
     scores = [0 for i in range(doc_number)]
+    query_items = set([(term,query.count(term)) for term in query])
+    all_docs_containing_terms = []
+    # Adding all documents containing at least one of the query terms
+    for item in query_items:
+        if item[0] in index:
+            postings = index[item[0]][1]
+            for doc_id in postings:
+                all_docs_containing_terms.append(doc_id)
+    # Filtering the documents that do not have the coverage threshold
+    all_docs_containing_terms = list(filter(lambda x: doc_has_coverage(x, [item[0] for item in query_items], doc_coverage_threshold), all_docs_containing_terms))
     # Loop over the query items
     for term in query_items:
         # Check if the term is in the index
@@ -235,10 +255,11 @@ def ranked_retreival_search(query, index_elimination_threshold=0.0):
             # Calculate tf.idf for each query item in query
             w_tq = (1 + math.log10(term[1])) * math.log10(doc_number / index[term[0]][2])
             # Add tf.id for each query item and its documents
-            for doc_id in index[term[0]][1]:
-                w_dt = (1 + math.log10(index[term[0]][1][doc_id][0])) * math.log10(doc_number / index[term[0]][2])
-                tf_idf = w_tq * w_dt
-                scores[int(doc_id) - 1] += tf_idf
+            for doc_id in all_docs_containing_terms:
+                if doc_id in index[term[0]][1]:
+                    w_dt = (1 + math.log10(index[term[0]][1][doc_id][0])) * math.log10(doc_number / index[term[0]][2])
+                    tf_idf = w_tq * w_dt
+                    scores[int(doc_id) - 1] += tf_idf
     # devide each score by document length
     for i in range(doc_number):
         if length_arr[i] != 0:
@@ -248,9 +269,9 @@ def ranked_retreival_search(query, index_elimination_threshold=0.0):
     # return the top 10 results
     return [str(x[0] + 1) for x in scores_sorted[:10]]
 
-def search(query, ranked=True, index_eliminiation_threshold=0.0):
+def search(query, ranked=True, index_eliminiation_threshold=0.0, doc_coverage_threshold=0.6):
     if ranked:
-        return ranked_retreival_search(query, index_elimination_threshold=index_eliminiation_threshold)
+        return ranked_retreival_search(query, index_elimination_threshold=index_eliminiation_threshold, doc_coverage_threshold=doc_coverage_threshold)
     return multiple_word_query(query)
 
 def plot_zipf_law(index):
@@ -290,7 +311,7 @@ while True:
     query = input('Enter your query: ')
     query = list(map(lambda token: token[0], perform_linguistic_preprocessing(query)))
     if len(query) != 0:
-        news = search(query, ranked=True, index_eliminiation_threshold=0.0)
+        news = search(query, ranked=True, index_eliminiation_threshold=0.0, doc_coverage_threshold=0.5)
         if news is None:
             print('No news found')
         else:
