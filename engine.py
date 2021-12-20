@@ -223,7 +223,7 @@ def multiple_word_query(query):
 
         return news
 
-def ranked_retreival_search(query):
+def ranked_retreival_search(query, index_elimination_threshold=0.0):
     '''A function to perform a ranked retrieval search.'''
     query_items = set([(term,query.count(term)) for term in query])
     doc_number = sheet.max_row - 1
@@ -231,7 +231,7 @@ def ranked_retreival_search(query):
     # Loop over the query items
     for term in query_items:
         # Check if the term is in the index
-        if term[0] in index:
+        if term[0] in index and math.log10(doc_number / index[term[0]][2]) >= index_elimination_threshold:
             # Calculate tf.idf for each query item in query
             w_tq = (1 + math.log10(term[1])) * math.log10(doc_number / index[term[0]][2])
             # Add tf.id for each query item and its documents
@@ -248,9 +248,9 @@ def ranked_retreival_search(query):
     # return the top 10 results
     return [str(x[0] + 1) for x in scores_sorted[:10]]
 
-def search(query, ranked=True):
+def search(query, ranked=True, index_eliminiation_threshold=0.0):
     if ranked:
-        return ranked_retreival_search(query)
+        return ranked_retreival_search(query, index_elimination_threshold=index_eliminiation_threshold)
     return multiple_word_query(query)
 
 def plot_zipf_law(index):
@@ -285,13 +285,12 @@ print('Reading index...')
 index = read_index()
 print('Creating length array...')
 length_arr = create_length_arr(index)
-print(length_arr[0:10])
 
 while True:
     query = input('Enter your query: ')
     query = list(map(lambda token: token[0], perform_linguistic_preprocessing(query)))
     if len(query) != 0:
-        news = search(query, ranked=False)
+        news = search(query, ranked=True, index_eliminiation_threshold=0.0)
         if news is None:
             print('No news found')
         else:
