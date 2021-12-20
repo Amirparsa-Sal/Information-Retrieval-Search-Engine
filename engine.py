@@ -14,6 +14,7 @@ stop_words = stopwords_list()
 normalizer = Normalizer()
 stemmer = FindStems()
 index = dict() #token -> [freq, {doc_id1: [freq, pos1, pos2, ...], doc_id2: [freq, pos1, pos2, ...], ...}, doc_freq]
+length_arr = []
 EXCEL_FILE_NAME = 'data.xlsx'
 LINK_REGEX = r"((http|https)\:\/\/)?[a-zA-Z0-9\.\/\?\:@\-_=#]+\.([a-zA-Z]){2,6}([ا-یa-zA-Z0-9\.\&\/\?\:@\-_=# ])*"
 punctuations = string.punctuation
@@ -91,6 +92,21 @@ def create_index(index, delete_stop_words=True):
     # Saving the index to a json file
     json.dump(index, open('index.json', 'w'))
 
+def create_length_arr(index):
+    '''
+    A function to calculate length of the document vectors.\n
+    Args:\n
+        index (dict): The index to be created.\n
+    '''
+    doc_number = sheet.max_row - 1
+    arr = [0 for i in range(doc_number)]
+    for term, postings in index.items():
+        for doc_id, posting in postings[1].items():
+            arr[int(doc_id) - 1] += ((1 + math.log10(posting[0])) * math.log10(doc_number / postings[2])) ** 2
+    for i in range(len(arr)):
+        arr[i] = math.sqrt(arr[i])
+    return arr
+    
 def read_index():
     '''A function to read the index from the json file.'''
     value = json.loads(open('index.json', 'r').read())
@@ -207,6 +223,36 @@ def multiple_word_query(query):
 
         return news
 
+def ranked_retreival_search(query):
+    '''A function to perform a ranked retrieval search.'''
+    query_items = set([(term,query.count(term)) for term in query])
+    doc_number = sheet.max_row - 1
+    scores = [0 for i in range(doc_number)]
+    # Loop over the query items
+    for term in query_items:
+        # Check if the term is in the index
+        if term[0] in index:
+            # Calculate tf.idf for each query item in query
+            w_tq = (1 + math.log10(term[1])) * math.log10(doc_number / index[term[0]][2])
+            # Add tf.id for each query item and its documents
+            for doc_id in index[term[0]][1]:
+                w_dt = (1 + math.log10(index[term[0]][1][doc_id][0])) * math.log10(doc_number / index[term[0]][2])
+                tf_idf = w_tq * w_dt
+                scores[int(doc_id) - 1] += tf_idf
+    # devide each score by document length
+    for i in range(doc_number):
+        if length_arr[i] != 0:
+            scores[i] /= length_arr[i]
+    # sort the scores
+    scores_sorted = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
+    # return the top 10 results
+    return [str(x[0] + 1) for x in scores_sorted[:10]]
+
+def search(query, ranked=True):
+    if ranked:
+        return ranked_retreival_search(query)
+    return multiple_word_query(query)
+
 def plot_zipf_law(index):
     '''A function to plot the Zipf law.'''
     index = OrderedDict(sorted(index.items(), key=lambda x: x[1][0], reverse=True))
@@ -235,13 +281,17 @@ def count_tokens_and_text_length(n, stemming=True):
 if not os.path.exists('index.json'):
     create_index(index, delete_stop_words=True)
 
+print('Reading index...')
 index = read_index()
-print(index['لیورپول'])
+print('Creating length array...')
+length_arr = create_length_arr(index)
+print(length_arr[0:10])
+
 while True:
     query = input('Enter your query: ')
     query = list(map(lambda token: token[0], perform_linguistic_preprocessing(query)))
     if len(query) != 0:
-        news = multiple_word_query(query)
+        news = search(query, ranked=False)
         if news is None:
             print('No news found')
         else:
@@ -251,5 +301,5 @@ while True:
                 print(new[1] + ': ' + new[0])
     else:
         print('No news found')
-
-        
+    
+    
