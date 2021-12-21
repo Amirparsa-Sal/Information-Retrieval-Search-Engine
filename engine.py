@@ -52,10 +52,7 @@ def perform_linguistic_preprocessing(text, delete_stop_words=True, stemming=True
 
     return token_positions
 
-wb = openpyxl.load_workbook(EXCEL_FILE_NAME)
-sheet = wb.active
-
-def create_index(index, delete_stop_words=True):
+def create_index(sheet, index, delete_stop_words=True):
     '''
     A function to create an index from the excel file.\n
     Args:\n
@@ -94,7 +91,7 @@ def create_index(index, delete_stop_words=True):
     # Saving the index to a json file
     json.dump(index, open('index.json', 'w'))
 
-def create_length_arr(index):
+def create_length_arr(sheet, index):
     '''
     A function to calculate length of the document vectors.\n
     Args:\n
@@ -245,9 +242,8 @@ def doc_has_coverage(doc_id, query_terms, coverage_threshold=0.6):
         return True
     return False
     
-def ranked_retreival_search(query, index_elimination_threshold=0.0, doc_coverage_threshold=0.6, use_champions_list=False):
+def ranked_retreival_search(doc_number, query, index_elimination_threshold=0.0, doc_coverage_threshold=0.6, use_champions_list=False):
     '''A function to perform a ranked retrieval search.'''
-    doc_number = sheet.max_row - 1
     query_items = set([(term,query.count(term)) for term in query])
     all_docs_containing_terms = set()
     if not use_champions_list:
@@ -288,9 +284,9 @@ def ranked_retreival_search(query, index_elimination_threshold=0.0, doc_coverage
     # return the top 10 results
     return [str(x[0] + 1) for x in scores_sorted[:10]]
 
-def search(query, ranked=True, index_eliminiation_threshold=0.0, doc_coverage_threshold=0.6, use_champions_list=False):
+def search(query, sheet, ranked=True, index_eliminiation_threshold=0.0, doc_coverage_threshold=0.6, use_champions_list=False):
     if ranked:
-        return ranked_retreival_search(query, index_elimination_threshold=index_eliminiation_threshold, doc_coverage_threshold=doc_coverage_threshold, use_champions_list=use_champions_list)
+        return ranked_retreival_search(sheet.max_row - 1, query, index_elimination_threshold=index_eliminiation_threshold, doc_coverage_threshold=doc_coverage_threshold, use_champions_list=use_champions_list)
     return multiple_word_query(query)
 
 def plot_zipf_law(index):
@@ -306,7 +302,7 @@ def plot_zipf_law(index):
     plt.plot(ranks, count_multiply_rank)
     plt.show()
 
-def count_tokens_and_text_length(n, stemming=True):
+def count_tokens_and_text_length(sheet, n, stemming=True):
     '''A function to count the number of tokens and the length of the text.'''
     tokens = dict()
     length = 0
@@ -318,36 +314,41 @@ def count_tokens_and_text_length(n, stemming=True):
             tokens[token[0]] = True
     return len(tokens), length
 
-if not os.path.exists('index.json'):
-    print('Creating index...')
-    create_index(index, delete_stop_words=True)
-else:
-    print('Reading index...')
-    index = read_dic_from_file('index.json')
+if __name__ == '__main__':
 
-if not os.path.exists(f'champions{CHAMPIONS_LIST_SIZE}.json'):
-    print('Creating champions list...')
-    champions_list = create_champions_list(index)
-else:
-    print('Reading champions list...')
-    champions_list = read_dic_from_file(f'champions{CHAMPIONS_LIST_SIZE}.json')
+    wb = openpyxl.load_workbook(EXCEL_FILE_NAME)
+    sheet = wb.active
 
-print('Creating length array...')
-length_arr = create_length_arr(index)
-
-while True:
-    query = input('Enter your query: ')
-    query = list(map(lambda token: token[0], perform_linguistic_preprocessing(query)))
-    if len(query) != 0:
-        news = search(query, ranked=True, index_eliminiation_threshold=0.0, doc_coverage_threshold=0.5, use_champions_list=True)
-        if news is None:
-            print('No news found')
-        else:
-            print('News found:')
-            news = list(map(lambda doc_id: (sheet.cell(row=int(doc_id)+1, column=3).value,doc_id), news))
-            for i,new in enumerate(news):
-                print(new[1] + ': ' + new[0])
+    if not os.path.exists('index.json'):
+        print('Creating index...')
+        create_index(sheet, index, delete_stop_words=True)
     else:
-        print('No news found')
-    
-    
+        print('Reading index...')
+        index = read_dic_from_file('index.json')
+
+    if not os.path.exists(f'champions{CHAMPIONS_LIST_SIZE}.json'):
+        print('Creating champions list...')
+        champions_list = create_champions_list(index)
+    else:
+        print('Reading champions list...')
+        champions_list = read_dic_from_file(f'champions{CHAMPIONS_LIST_SIZE}.json')
+
+    print('Creating length array...')
+    length_arr = create_length_arr(sheet, index)
+
+    while True:
+        query = input('Enter your query: ')
+        query = list(map(lambda token: token[0], perform_linguistic_preprocessing(query)))
+        if len(query) != 0:
+            news = search(query, sheet, ranked=True, index_eliminiation_threshold=0.0, doc_coverage_threshold=0.5, use_champions_list=True)
+            if news is None:
+                print('No news found')
+            else:
+                print('News found:')
+                news = list(map(lambda doc_id: (sheet.cell(row=int(doc_id)+1, column=3).value,doc_id), news))
+                for i,new in enumerate(news):
+                    print(new[1] + ': ' + new[0])
+        else:
+            print('No news found')
+        
+        
