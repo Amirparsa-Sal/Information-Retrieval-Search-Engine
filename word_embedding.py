@@ -8,10 +8,12 @@ from gensim.models import Word2Vec
 import os
 import multiprocessing
 import time 
+import matplotlib.pyplot as plt
 
 EXCEL_FILE_NAME = 'data.xlsx'
 wb = openpyxl.load_workbook(EXCEL_FILE_NAME)
 sheet = wb.active
+MODEL_FILE = 'insa_news.model'
 
 def create_tokens_list(sheet, delete_stop_words=True):
     doc_token_list = []
@@ -55,8 +57,9 @@ def create_docs_matrix(model, docs_tf_id_list):
         vector = np.zeros((300))
         weight_sum = 0
         for key in docs_tf_id_list[i]:
-            vector += model.wv[key] * docs_tf_id_list[i][key]
-            weight_sum += docs_tf_id_list[i][key]
+            if key in model.wv:
+                vector += model.wv[key] * docs_tf_id_list[i][key]
+                weight_sum += docs_tf_id_list[i][key]
         if weight_sum != 0:
             vector /= weight_sum
         for j in range(300):
@@ -88,7 +91,7 @@ def search(model, matrix, query, doc_number):
         scores[i] += np.dot(query_vector.T, matrix[:, i]) / (norm(matrix[:, i]) * norm(query_vector))
     # Sort the scores in descending order
     scores = sorted(enumerate(scores), key = lambda x: x[1], reverse=True)
-    return [str(score[0] + 1) for score in scores[:min(10, len(scores))]]
+    return [(str(score[0] + 1), score[1]) for score in scores[:min(10, len(scores))]]
 
 if __name__ == '__main__':
     doc_token_list = []
@@ -99,7 +102,7 @@ if __name__ == '__main__':
         doc_token_list = pickle.load(open("token_list.obj", "rb"))
 
     model = None
-    if not os.path.exists("isna_news.model"):
+    if not os.path.exists(MODEL_FILE):
         model = Word2Vec(min_count = 1,
                             window = 5,
                             vector_size = 300,
@@ -108,23 +111,24 @@ if __name__ == '__main__':
         model.build_vocab(doc_token_list)
         print('Start Training model...')
         start = time.time()
-        model.train(doc_token_list, total_examples = model.corpus_count, epochs = 50)
+        model.train(doc_token_list, total_examples = model.corpus_count, epochs = 100)
         end = time.time()
         print(f'Completed in {(end - start)} s')
-        model.save('isna_news.model')
+        model.save(MODEL_FILE)
         print(f'Model saved')
     else:
         print("Loading model")
-        model = Word2Vec.load('isna_news.model')
+        model = Word2Vec.load(MODEL_FILE)
 
-    del doc_token_list
-
+    
     tf_idf_list = []
     if not os.path.exists("tf_idf_dic.obj"):
         print("Creating tf-idf list")
         tf_idf_list = create_tf_idf_list(len(doc_token_list))
     else:
         tf_idf_list = pickle.load(open("tf_idf_dic.obj", "rb"))
+    
+    del doc_token_list
 
     # print('Creating matrix...')
     matrix = create_docs_matrix(model, tf_idf_list)
@@ -143,8 +147,11 @@ if __name__ == '__main__':
                 print('No news found')
             else:
                 print('News found:')
-                news = list(map(lambda doc_id: (sheet.cell(row=int(doc_id)+1, column=3).value,doc_id), news))
+                news = list(map(lambda new: (sheet.cell(row=int(new[0])+1, column=2).value, sheet.cell(row=int(new[0])+1, column=3).value, new[0], new[1]), news))
                 for i,new in enumerate(news):
-                    print(new[1] + ': ' + new[0])
+                    print(new[2] + ': ' + new[1])
+                    print(f"Similarity: {new[3]}")
+                    print(new[0])
+                    print()
         else:
             print('No news found')
