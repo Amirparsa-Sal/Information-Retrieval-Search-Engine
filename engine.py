@@ -18,7 +18,7 @@ length_arr = []
 EXCEL_FILE_NAME = 'data.xlsx'
 LINK_REGEX = r"((http|https)\:\/\/)?[a-zA-Z0-9\.\/\?\:@\-_=#]+\.([a-zA-Z]){2,6}([ا-یa-zA-Z0-9\.\&\/\?\:@\-_=# ])*"
 punctuations = string.punctuation
-punctuations += ''.join(['،','؛','»','«'])
+punctuations += ''.join(['،','؛','»','«','؟'])
 CHAMPIONS_LIST_SIZE=  20
 champions_list = dict()
 
@@ -261,7 +261,6 @@ def ranked_retreival_search(doc_number, query, index_elimination_threshold=0.0, 
 
     # Filtering the documents that do not have the coverage threshold
     all_docs_containing_terms = list(filter(lambda x: doc_has_coverage(x, [item[0] for item in query_items], doc_coverage_threshold), all_docs_containing_terms))
-
     scores = [0 for i in range(doc_number)]
     # Loop over the query items
     for item in query_items:
@@ -272,6 +271,9 @@ def ranked_retreival_search(doc_number, query, index_elimination_threshold=0.0, 
             # Add tf.id for each query item and its documents
             for doc_id in all_docs_containing_terms:
                 if doc_id in index[item[0]][1]:
+                    if doc_id == '119':
+                        print(item[0], doc_id, 1 + math.log10(index[item[0]][1][doc_id][0]), index[item[0]][1][doc_id][0], math.log10(doc_number / index[item[0]][2]))
+                        print(index[item[0]][1][doc_id])
                     w_dt = (1 + math.log10(index[item[0]][1][doc_id][0])) * math.log10(doc_number / index[item[0]][2])
                     tf_idf = w_tq * w_dt
                     scores[int(doc_id) - 1] += tf_idf
@@ -281,6 +283,8 @@ def ranked_retreival_search(doc_number, query, index_elimination_threshold=0.0, 
             scores[i] /= length_arr[i]
     # sort the scores
     scores_sorted = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
+    for i in range (10):
+        print(scores_sorted[i][0], scores_sorted[i][1], length_arr[scores_sorted[i][0]])
     # return the top 10 results
     return [str(x[0] + 1) for x in scores_sorted[:10]]
 
@@ -315,7 +319,7 @@ def count_tokens_and_text_length(sheet, n, stemming=True):
     return len(tokens), length
 
 if __name__ == '__main__':
-
+    print(perform_linguistic_preprocessing('آیا مسی بهترین بازیکن جهان است؟'))
     wb = openpyxl.load_workbook(EXCEL_FILE_NAME)
     sheet = wb.active
 
@@ -340,14 +344,15 @@ if __name__ == '__main__':
         query = input('Enter your query: ')
         query = list(map(lambda token: token[0], perform_linguistic_preprocessing(query)))
         if len(query) != 0:
-            news = search(query, sheet, ranked=True, index_eliminiation_threshold=0.0, doc_coverage_threshold=0.5, use_champions_list=True)
+            news = search(query, sheet, ranked=True, index_eliminiation_threshold=0.0, doc_coverage_threshold=0.6, use_champions_list=True)
             if news is None:
                 print('No news found')
             else:
                 print('News found:')
-                news = list(map(lambda doc_id: (sheet.cell(row=int(doc_id)+1, column=3).value,doc_id), news))
+                news = list(map(lambda doc_id: (sheet.cell(row=int(doc_id)+1, column=2).value, sheet.cell(row=int(doc_id)+1, column=3).value, doc_id), news))
                 for i,new in enumerate(news):
-                    print(new[1] + ': ' + new[0])
+                    print(new[2] + ': ' + new[1])
+                    print(new[0])
         else:
             print('No news found')
         
