@@ -76,7 +76,8 @@ def search(model, matrix, query, doc_number):
     # Calculate tf-idf for the query
     query_tf_idf_dic = dict(zip(query, [query.count(item) for item in query]))
     for key in query_tf_idf_dic:
-        query_tf_idf_dic[key] = (1 + math.log10(query_tf_idf_dic[key])) * math.log10(doc_number / index[key])
+        if key in index:
+            query_tf_idf_dic[key] = (1 + math.log10(query_tf_idf_dic[key])) * math.log10(doc_number / index[key])
 
     query_vector = np.zeros((300))
     weight_sum = 0
@@ -111,7 +112,7 @@ if __name__ == '__main__':
         model.build_vocab(doc_token_list)
         print('Start Training model...')
         start = time.time()
-        model.train(doc_token_list, total_examples = model.corpus_count, epochs = 100)
+        model.train(doc_token_list, total_examples = model.corpus_count, epochs = 30)
         end = time.time()
         print(f'Completed in {(end - start)} s')
         model.save(MODEL_FILE)
@@ -130,14 +131,8 @@ if __name__ == '__main__':
     
     del doc_token_list
 
-    # print('Creating matrix...')
     matrix = create_docs_matrix(model, tf_idf_list)
-    # print('Calculating similarities...')
-    # print(similarity(matrix, 403, 690))
-    # print(similarity(matrix, 403, 1))
-    # print(similarity(matrix, 403, 1009))
-    # print(similarity(matrix, 403, 1515))
-    # print(similarity(matrix, 403, 124)) 
+    
     while True:
         query = input('Enter your query: ')
         query = list(map(lambda token: token[0], perform_linguistic_preprocessing(query)))
