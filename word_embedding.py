@@ -9,22 +9,10 @@ import os
 import multiprocessing
 import time 
 
-EXCEL_FILE_NAME = 'data.xlsx'
+EXCEL_FILE_NAME = 'Merged.xlsx'
 wb = openpyxl.load_workbook(EXCEL_FILE_NAME)
 sheet = wb.active
 MODEL_FILE = 'insa_news.model'
-
-def create_tokens_list(sheet, content_column, delete_stop_words=True):
-    doc_token_list = []
-    # Looping over the excel file
-    for i in range(2, sheet.max_row + 1):
-        content = sheet.cell(row=i, column=content_column).value
-        # Performing linguistic preprocessing on the content
-        token_list = perform_linguistic_preprocessing(content, delete_stop_words=delete_stop_words)
-        only_tokens_list = [item[0] for item in token_list]
-        doc_token_list.append(only_tokens_list)
-    pickle.dump(doc_token_list, open("token_list.obj", "wb"))
-    return doc_token_list
 
 def create_token_list_with_count(sheet, content_column, delete_stop_words=True):
     doc_token_list_with_counts = []
@@ -59,7 +47,7 @@ def create_tf_idf_list(doc_number, doc_token_list_with_counts, token_count):
     return doc_token_list_with_counts
 
 def create_docs_matrix(model, docs_tf_id_list):
-    matrix = np.matrix(np.zeros((300, len(docs_tf_id_list))))
+    matrix = np.array(np.zeros((300, len(docs_tf_id_list))))
     for i in range(len(docs_tf_id_list)):
         vector = np.zeros((300))
         weight_sum = 0
@@ -98,7 +86,8 @@ def search(model, matrix, query, token_count_dic, doc_number):
     query_vector = create_query_vector(model, query, token_count_dic, doc_number)
     scores = [0 for i in range(matrix.shape[1])]
     for i in range(matrix.shape[1]):
-        scores[i] += np.dot(query_vector.T, matrix[:, i]) / (norm(matrix[:, i]) * norm(query_vector))
+        if norm(matrix[:, i]) != 0:
+            scores[i] += np.dot(query_vector.T, matrix[:, i]) / (norm(matrix[:, i]) * norm(query_vector))
     # Sort the scores in descending order
     scores = sorted(enumerate(scores), key = lambda x: x[1], reverse=True)
     return [(str(score[0] + 1), score[1]) for score in scores[:min(10, len(scores))]]
@@ -128,12 +117,7 @@ if __name__ == '__main__':
         tf_idf_list = pickle.load(open("tf_idf_dic.obj", "rb"))
 
 
-    docs_token_list = []
-    if not os.path.exists("token_list.obj"):
-        print("Creating token list")
-        docs_token_list = create_tokens_list(sheet, columns_dic['content'])
-    else:
-        docs_token_list = pickle.load(open("token_list.obj", "rb"))
+    docs_token_list = [key for key in token_count_dic]
 
     model = None
     if not os.path.exists(MODEL_FILE):
