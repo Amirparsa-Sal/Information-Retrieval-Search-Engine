@@ -22,9 +22,9 @@ def calculate_rss(matrix, centroids, clusters):
         all_centroids[:, i] = centroids[:, clusters[i]]
     return np.sum(np.square(matrix - all_centroids))
 
-def perform_clustering(matrix, k, max_epochs=None):
+def perform_clustering(matrix, k, max_epochs=None, show_rss=True):
     distances = np.zeros((k, matrix.shape[1]))
-    clusters = np.zeros((1, matrix.shape[1]))
+    clusters = np.random.randint(0, k, size=(1, matrix.shape[1]))
     centroid_numbers = np.random.randint(0, matrix.shape[1], size=(1, k))
     centroids = np.zeros((matrix.shape[0], k))
     for i in range(k):
@@ -59,12 +59,13 @@ def perform_clustering(matrix, k, max_epochs=None):
             clusters_content[clusters[i]].append(i)
         else:
             clusters_content[clusters[i]] = [i]
-    plt.figure()
-    plt.plot(epochs, rss_list, 'b')
-    plt.xlabel('Epochs')
-    plt.ylabel('RSS')
-    plt.show()
-    return clusters_content, centroids
+    if show_rss:
+        plt.figure()
+        plt.plot(epochs, rss_list, 'b')
+        plt.xlabel('Epochs')
+        plt.ylabel('RSS')
+        plt.show()
+    return clusters_content, clusters, centroids
 
 def search(model, matrix, query, token_count_dic, clusters_content, centroids, doc_number, b = 1):
     query_vector = create_query_vector(model, query, token_count_dic, doc_number).reshape(-1,1)
@@ -145,8 +146,26 @@ if __name__ == '__main__':
     clusters_content = None
     centroids = None
     if choice or not (os.path.exists('centroids.obj') and os.path.exists('clusters_content.obj')):
-        k = int(input("Enter number of clusters: "))
-        clusters_content, centroids = perform_clustering(matrix, k=k)
+        choice = int(input("Do you want to check RSS for different numbers of clusters(1 for yes, 0 for no)? "))
+        if choice:
+            a, b = int(input("Enter the lower bound: ")), int(input("Enter the upper bound: "))
+            k_list = []
+            rss_list = []
+            for i in range (a, b+1):
+                print("----------------------------------------------")
+                print(f"Clustering with {i} clusters")
+                clusters_content, clusters, centroids = perform_clustering(matrix, i, show_rss=False)
+                k_list.append(i)
+                rss_list.append(calculate_rss(matrix, centroids, clusters))
+                print("----------------------------------------------")
+            plt.figure()
+            plt.plot(k_list, rss_list, 'b')
+            plt.xlabel('Number of clusters')
+            plt.ylabel('Final RSS')
+            plt.show()
+
+        k = int(input("Now, please enter the number of clusters: "))
+        clusters_content, clusters, centroids = perform_clustering(matrix, k=k)
         pickle.dump(clusters_content, open("clusters_content.obj", "wb"))
         np.save(open("centroids.obj", "wb"), centroids)
     else:
