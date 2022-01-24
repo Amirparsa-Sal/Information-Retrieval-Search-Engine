@@ -1,6 +1,4 @@
 import multiprocessing
-from multiprocessing.spawn import import_main_path
-from scipy.fftpack import ss_diff
 from word_embedding import create_tf_idf_list, create_docs_matrix, fill_column_numbers, \
     create_token_list_with_count,create_token_count_dic, create_query_vector
 from engine import perform_linguistic_preprocessing
@@ -11,11 +9,18 @@ import openpyxl
 import os
 import time
 from numpy.linalg import norm
+import matplotlib.pyplot as plt
 
 EXCEL_FILE_NAME = 'Merged.xlsx'
 wb = openpyxl.load_workbook(EXCEL_FILE_NAME)
 sheet = wb.active
 MODEL_FILE = 'insa_news.model'
+
+def calculate_rss(matrix, centroids, clusters):
+    all_centroids = np.zeros((matrix.shape[0], matrix.shape[1]))
+    for i in range (matrix.shape[1]):
+        all_centroids[:, i] = centroids[:, clusters[i]]
+    return np.sum(np.square(matrix - all_centroids))
 
 def perform_clustering(matrix, k, max_epochs=None):
     distances = np.zeros((k, matrix.shape[1]))
@@ -24,9 +29,11 @@ def perform_clustering(matrix, k, max_epochs=None):
     centroids = np.zeros((matrix.shape[0], k))
     for i in range(k):
         centroids[:, i] = matrix[:, centroid_numbers[0, i]]
-    change = True
+    change = float('inf')
     epoch = 0
-    while change and (max_epochs is None or epoch < max_epochs):
+    epochs = []
+    rss_list = []
+    while change > 50 and (max_epochs is None or epoch < max_epochs):
         for i in range(k):
             centroid_vector = centroids[:, i].reshape(-1, 1)
             difference = matrix - centroid_vector
@@ -37,9 +44,13 @@ def perform_clustering(matrix, k, max_epochs=None):
         new_centroids = np.zeros((matrix.shape[0], k))
         for i in range(k):
             new_centroids[:, i] = np.mean(matrix[:, new_clusters == i], axis=1)
-        change = np.count_nonzero(new_clusters - clusters)
         centroids = new_centroids
         clusters = new_clusters
+        epochs.append(epoch)
+        rss = calculate_rss(matrix, centroids, new_clusters)
+        rss_list.append(rss)
+        if epoch > 0:
+            change = rss_list[-2] - rss_list[-1]
         print(change)
         epoch += 1
     clusters_content = dict()
@@ -48,6 +59,11 @@ def perform_clustering(matrix, k, max_epochs=None):
             clusters_content[clusters[i]].append(i)
         else:
             clusters_content[clusters[i]] = [i]
+    plt.figure()
+    plt.plot(epochs, rss_list, 'b')
+    plt.xlabel('Epochs')
+    plt.ylabel('RSS')
+    plt.show()
     return clusters_content, centroids
 
 def search(model, matrix, query, token_count_dic, clusters_content, centroids, doc_number, b = 1):
