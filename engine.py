@@ -9,13 +9,14 @@ import json
 import os
 import matplotlib.pyplot as plt
 import math
+import time
 
 stop_words = stopwords_list()
 normalizer = Normalizer()
 stemmer = FindStems()
 index = dict() #token -> [freq, {doc_id1: [freq, pos1, pos2, ...], doc_id2: [freq, pos1, pos2, ...], ...}, doc_freq]
 length_arr = []
-EXCEL_FILE_NAME = 'Merged.xlsx'
+EXCEL_FILE_NAME = 'data.xlsx'
 LINK_REGEX = r"((http|https)\:\/\/)?[a-zA-Z0-9\.\/\?\:@\-_=#]+\.([a-zA-Z]){2,6}([ا-یa-zA-Z0-9\.\&\/\?\:@\-_=# ])*"
 punctuations = string.punctuation
 punctuations += ''.join(['،','؛','»','«','؟'])
@@ -63,7 +64,8 @@ def perform_linguistic_preprocessing(text, delete_stop_words=True, stemming=True
 
     return token_positions
 
-def create_index(sheet, index, content_column, delete_stop_words=True):
+
+def create_index(sheet, index, content_column, delete_stop_words=True, file_name='index.json'):
     '''
     A function to create an index from the excel file.\n
     Args:\n
@@ -100,7 +102,7 @@ def create_index(sheet, index, content_column, delete_stop_words=True):
     # Sorting the index Alphabetically
     index = OrderedDict(sorted(index.items(), key=lambda x: x[0], reverse=False))
     # Saving the index to a json file
-    json.dump(index, open('index.json', 'w'))
+    json.dump(index, open(file_name, 'w'))
 
 def create_length_arr(sheet, index):
     '''
@@ -117,13 +119,13 @@ def create_length_arr(sheet, index):
         arr[i] = math.sqrt(arr[i])
     return arr
 
-def create_champions_list(index):
+def create_champions_list(index, champions_list_size):
     champions_list = dict()
     for term, postings in index.items():
         tops = sorted(postings[1].items(), key=lambda x: x[1][0], reverse=True)
-        top_k = tops[:min(CHAMPIONS_LIST_SIZE,len(tops))]
+        top_k = tops[:min(champions_list_size,len(tops))]
         champions_list[term] = [item[0] for item in top_k]
-    json.dump(champions_list, open(f'champions{CHAMPIONS_LIST_SIZE}.json', 'w'))
+    json.dump(champions_list, open(f'champions{champions_list_size}.json', 'w'))
     return champions_list
     
 def read_dic_from_file(file_name):
@@ -253,7 +255,7 @@ def doc_has_coverage(doc_id, query_terms, coverage_threshold=0.6):
         return True
     return False
     
-def ranked_retreival_search(doc_number, query, index_elimination_threshold=0.0, doc_coverage_threshold=0.6, use_champions_list=False):
+def ranked_retreival_search(index, doc_number, query, length_arr, k=10, index_elimination_threshold=0.0, doc_coverage_threshold=0.6, champions_list={}, use_champions_list=False):
     '''A function to perform a ranked retrieval search.'''
     query_items = set([(term,query.count(term)) for term in query])
     all_docs_containing_terms = set()
@@ -292,11 +294,11 @@ def ranked_retreival_search(doc_number, query, index_elimination_threshold=0.0, 
     # sort the scores
     scores_sorted = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
     # return the top 10 results
-    return [str(x[0] + 1) for x in scores_sorted[:10]]
+    return [str(x[0] + 1) for x in scores_sorted[:k]]
 
-def search(query, max_row, ranked=True, index_eliminiation_threshold=0.0, doc_coverage_threshold=0.6, use_champions_list=False):
+def search(index, query, max_row, length_arr, k=10, ranked=True, index_eliminiation_threshold=0.0, doc_coverage_threshold=0.6,champions_list={}, use_champions_list=False):
     if ranked:
-        return ranked_retreival_search(max_row, query, index_elimination_threshold=index_eliminiation_threshold, doc_coverage_threshold=doc_coverage_threshold, use_champions_list=use_champions_list)
+        return ranked_retreival_search(index, max_row, query, length_arr, k=k, index_elimination_threshold=index_eliminiation_threshold, doc_coverage_threshold=doc_coverage_threshold,champions_list=champions_list, use_champions_list=use_champions_list)
     return multiple_word_query(query)
 
 def plot_zipf_law(index):
@@ -330,16 +332,16 @@ if __name__ == '__main__':
 
     columns_dic = fill_column_numbers(sheet)
 
-    if not os.path.exists('index.json'):
+    if not os.path.exists('test_index.json'):
         print('Creating index...')
-        create_index(sheet, index, columns_dic['content'], delete_stop_words=True)
+        create_index(sheet, index, columns_dic['content'], delete_stop_words=True, file_name='test_index.json')
     else:
         print('Reading index...')
-        index = read_dic_from_file('index.json')
+        index = read_dic_from_file('test_index.json')
 
     if not os.path.exists(f'champions{CHAMPIONS_LIST_SIZE}.json'):
         print('Creating champions list...')
-        champions_list = create_champions_list(index)
+        champions_list = create_champions_list(index, CHAMPIONS_LIST_SIZE)
     else:
         print('Reading champions list...')
         champions_list = read_dic_from_file(f'champions{CHAMPIONS_LIST_SIZE}.json')
@@ -354,7 +356,9 @@ if __name__ == '__main__':
         query = input('Enter your query: ')
         query = list(map(lambda token: token[0], perform_linguistic_preprocessing(query)))
         if len(query) != 0:
-            news = search(query, max_row, ranked=True, index_eliminiation_threshold=0.0, doc_coverage_threshold=0.6, use_champions_list=True)
+            start_time = time.time()
+            news = search(index, query, max_row, length_arr, ranked=True, index_eliminiation_threshold=0.0, doc_coverage_threshold=0.5,champions_list=champions_list, use_champions_list=True)
+            end_time = time.time()
             if news is None:
                 print('No news found')
             else:
@@ -363,6 +367,7 @@ if __name__ == '__main__':
                 for i,new in enumerate(news):
                     print(new[2] + ': ' + new[1])
                     print(new[0])
+            print("Time taken:", end_time - start_time)
         else:
             print('No news found')
         
