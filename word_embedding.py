@@ -149,7 +149,9 @@ if __name__ == '__main__':
         query = input('Enter your query: ')
         query = list(map(lambda token: token[0], perform_linguistic_preprocessing(query)))
         if len(query) != 0:
+            start_time = time.time()
             news = search(model, matrix, query, token_count_dic, sheet.max_row - 1)
+            end_time = time.time()
             if news is None:
                 print('No news found')
             else:
@@ -160,5 +162,6 @@ if __name__ == '__main__':
                     print(f"Similarity: {new[3]}")
                     print(new[0])
                     print()
+                print(f"Time taken: {end_time - start_time}")
         else:
             print('No news found')
