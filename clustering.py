@@ -1,6 +1,6 @@
 import multiprocessing
 from word_embedding import create_tf_idf_list, create_docs_matrix, fill_column_numbers, \
-    create_token_list_with_count,create_token_count_dic, create_query_vector
+    create_token_list_with_count,create_token_count_dic, create_query_vector, create_tokens_list
 from engine import perform_linguistic_preprocessing
 import pickle
 import numpy as np
@@ -11,7 +11,7 @@ import time
 from numpy.linalg import norm
 import matplotlib.pyplot as plt
 
-EXCEL_FILE_NAME = 'Merged.xlsx'
+EXCEL_FILE_NAME = 'Data/Merged.xlsx'
 wb = openpyxl.load_workbook(EXCEL_FILE_NAME)
 sheet = wb.active
 MODEL_FILE = 'insa_news.model'
@@ -107,7 +107,12 @@ if __name__ == '__main__':
         tf_idf_list = pickle.load(open("tf_idf_dic.obj", "rb"))
 
 
-    docs_token_list = [key for key in token_count_dic]
+    doc_token_list = []
+    if not os.path.exists("token_list.obj"):
+        print("Creating token list")
+        doc_token_list = create_tokens_list(sheet, columns_dic['content'])
+    else:
+        doc_token_list = pickle.load(open("token_list.obj", "rb"))
 
     model = None
     if not os.path.exists(MODEL_FILE):
@@ -116,10 +121,10 @@ if __name__ == '__main__':
                             vector_size = 300,
                             alpha = 0.03,
                             workers = multiprocessing.cpu_count() - 1)
-        model.build_vocab(docs_token_list)
+        model.build_vocab(doc_token_list)
         print('Start Training model...')
         start = time.time()
-        model.train(docs_token_list, total_examples = model.corpus_count, epochs = 30)
+        model.train(doc_token_list, total_examples = model.corpus_count, epochs = 30)
         end = time.time()
         print(f'Completed in {(end - start)} s')
         model.save(MODEL_FILE)
@@ -128,7 +133,7 @@ if __name__ == '__main__':
         print("Loading model")
         model = Word2Vec.load(MODEL_FILE)
     
-    del docs_token_list
+    del doc_token_list
 
     matrix = None
     if not os.path.exists('docs_matrix.obj'):

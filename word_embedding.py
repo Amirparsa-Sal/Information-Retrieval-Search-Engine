@@ -9,10 +9,22 @@ import os
 import multiprocessing
 import time 
 
-EXCEL_FILE_NAME = 'Merged.xlsx'
+EXCEL_FILE_NAME = 'Data/Merged.xlsx'
 wb = openpyxl.load_workbook(EXCEL_FILE_NAME)
 sheet = wb.active
 MODEL_FILE = 'insa_news.model'
+
+def create_tokens_list(sheet, content_column, delete_stop_words=True):
+    doc_token_list = []
+    # Looping over the excel file
+    for i in range(2, sheet.max_row + 1):
+        content = sheet.cell(row=i, column=content_column).value
+        # Performing linguistic preprocessing on the content
+        token_list = perform_linguistic_preprocessing(content, delete_stop_words=delete_stop_words)
+        only_tokens_list = [item[0] for item in token_list]
+        doc_token_list.append(only_tokens_list)
+    pickle.dump(doc_token_list, open("token_list.obj", "wb"))
+    return doc_token_list
 
 def create_token_list_with_count(sheet, content_column, delete_stop_words=True):
     doc_token_list_with_counts = []
@@ -117,7 +129,12 @@ if __name__ == '__main__':
         tf_idf_list = pickle.load(open("tf_idf_dic.obj", "rb"))
 
 
-    docs_token_list = [key for key in token_count_dic]
+    doc_token_list = []
+    if not os.path.exists("token_list.obj"):
+        print("Creating token list")
+        doc_token_list = create_tokens_list(sheet, columns_dic['content'])
+    else:
+        doc_token_list = pickle.load(open("token_list.obj", "rb"))
 
     model = None
     if not os.path.exists(MODEL_FILE):
@@ -126,10 +143,10 @@ if __name__ == '__main__':
                             vector_size = 300,
                             alpha = 0.03,
                             workers = multiprocessing.cpu_count() - 1)
-        model.build_vocab(docs_token_list)
+        model.build_vocab(doc_token_list)
         print('Start Training model...')
         start = time.time()
-        model.train(docs_token_list, total_examples = model.corpus_count, epochs = 30)
+        model.train(doc_token_list, total_examples = model.corpus_count, epochs = 30)
         end = time.time()
         print(f'Completed in {(end - start)} s')
         model.save(MODEL_FILE)
@@ -138,7 +155,7 @@ if __name__ == '__main__':
         print("Loading model")
         model = Word2Vec.load(MODEL_FILE)
     
-    del docs_token_list
+    del doc_token_list
 
     matrix = create_docs_matrix(model, tf_idf_list)
     

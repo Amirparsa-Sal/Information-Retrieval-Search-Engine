@@ -6,14 +6,13 @@ import os
 import time 
 import math
 
-DATA_EXCEL_FILE_NAME = 'Merged.xlsx'
-TEST_EXCEL_FILE_NAME = 'data.xlsx'
+DATA_EXCEL_FILE_NAME = 'Data/Merged.xlsx'
+TEST_EXCEL_FILE_NAME = 'Data/data.xlsx'
 
 index = dict() #token -> [freq, {doc_id1: [freq, pos1, pos2, ...], doc_id2: [freq, pos1, pos2, ...], ...}, doc_freq]
-EXCEL_FILE_NAME = 'Merged.xlsx'
 CHAMPIONS_LIST_SIZE = 20
 champions_list = dict()
-k = 15
+k = 7
 
 def search_in_topics(index, query, cat, topics, doc_number, length_arr):
     '''A function to perform a ranked retrieval search.'''

@@ -16,7 +16,7 @@ normalizer = Normalizer()
 stemmer = FindStems()
 index = dict() #token -> [freq, {doc_id1: [freq, pos1, pos2, ...], doc_id2: [freq, pos1, pos2, ...], ...}, doc_freq]
 length_arr = []
-EXCEL_FILE_NAME = 'data.xlsx'
+EXCEL_FILE_NAME = 'Data/data.xlsx'
 LINK_REGEX = r"((http|https)\:\/\/)?[a-zA-Z0-9\.\/\?\:@\-_=#]+\.([a-zA-Z]){2,6}([ا-یa-zA-Z0-9\.\&\/\?\:@\-_=# ])*"
 punctuations = string.punctuation
 punctuations += ''.join(['،','؛','»','«','؟'])
